@@ -39,6 +39,21 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 	if oldCfg.UsageStatisticsEnabled != newCfg.UsageStatisticsEnabled {
 		changes = append(changes, fmt.Sprintf("usage-statistics-enabled: %t -> %t", oldCfg.UsageStatisticsEnabled, newCfg.UsageStatisticsEnabled))
 	}
+	if oldCfg.UsageStatisticsStorage.Enabled != newCfg.UsageStatisticsStorage.Enabled {
+		changes = append(changes, fmt.Sprintf("usage-statistics-storage.enabled: %t -> %t", oldCfg.UsageStatisticsStorage.Enabled, newCfg.UsageStatisticsStorage.Enabled))
+	}
+	if strings.TrimSpace(oldCfg.UsageStatisticsStorage.Driver) != strings.TrimSpace(newCfg.UsageStatisticsStorage.Driver) {
+		changes = append(changes, fmt.Sprintf("usage-statistics-storage.driver: %s -> %s", strings.TrimSpace(oldCfg.UsageStatisticsStorage.Driver), strings.TrimSpace(newCfg.UsageStatisticsStorage.Driver)))
+	}
+	if strings.TrimSpace(oldCfg.UsageStatisticsStorage.Path) != strings.TrimSpace(newCfg.UsageStatisticsStorage.Path) {
+		changes = append(changes, fmt.Sprintf("usage-statistics-storage.path: %s -> %s", strings.TrimSpace(oldCfg.UsageStatisticsStorage.Path), strings.TrimSpace(newCfg.UsageStatisticsStorage.Path)))
+	}
+	if oldCfg.UsageStatisticsStorage.FlushIntervalSeconds != newCfg.UsageStatisticsStorage.FlushIntervalSeconds {
+		changes = append(changes, fmt.Sprintf("usage-statistics-storage.flush-interval-seconds: %d -> %d", oldCfg.UsageStatisticsStorage.FlushIntervalSeconds, newCfg.UsageStatisticsStorage.FlushIntervalSeconds))
+	}
+	if oldCfg.UsageStatisticsStorage.BatchSize != newCfg.UsageStatisticsStorage.BatchSize {
+		changes = append(changes, fmt.Sprintf("usage-statistics-storage.batch-size: %d -> %d", oldCfg.UsageStatisticsStorage.BatchSize, newCfg.UsageStatisticsStorage.BatchSize))
+	}
 	if oldCfg.DisableCooling != newCfg.DisableCooling {
 		changes = append(changes, fmt.Sprintf("disable-cooling: %t -> %t", oldCfg.DisableCooling, newCfg.DisableCooling))
 	}

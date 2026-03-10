@@ -12,6 +12,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,6 +26,18 @@ import (
 //   - configPath: The path to the configuration file
 //   - localPassword: Optional password accepted for local management requests
 func StartService(cfg *config.Config, configPath string, localPassword string) {
+	if err := usage.ConfigurePersistence(usage.BuildPersistenceConfig(cfg), true); err != nil {
+		log.Errorf("failed to configure usage statistics persistence: %v", err)
+		return
+	}
+	defer func() {
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelShutdown()
+		if err := usage.ShutdownPersistence(shutdownCtx); err != nil {
+			log.Errorf("failed to shutdown usage statistics persistence: %v", err)
+		}
+	}()
+
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
@@ -58,6 +71,13 @@ func StartService(cfg *config.Config, configPath string, localPassword string) {
 // StartServiceBackground starts the proxy service in a background goroutine
 // and returns a cancel function for shutdown and a done channel.
 func StartServiceBackground(cfg *config.Config, configPath string, localPassword string) (cancel func(), done <-chan struct{}) {
+	if err := usage.ConfigurePersistence(usage.BuildPersistenceConfig(cfg), true); err != nil {
+		log.Errorf("failed to configure usage statistics persistence: %v", err)
+		doneCh := make(chan struct{})
+		close(doneCh)
+		return func() {}, doneCh
+	}
+
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
@@ -75,6 +95,13 @@ func StartServiceBackground(cfg *config.Config, configPath string, localPassword
 
 	go func() {
 		defer close(doneCh)
+		defer func() {
+			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelShutdown()
+			if err := usage.ShutdownPersistence(shutdownCtx); err != nil {
+				log.Errorf("failed to shutdown usage statistics persistence: %v", err)
+			}
+		}()
 		if err := service.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Errorf("proxy service exited with error: %v", err)
 		}

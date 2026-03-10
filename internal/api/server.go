@@ -903,6 +903,17 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 	if oldCfg == nil || oldCfg.UsageStatisticsEnabled != cfg.UsageStatisticsEnabled {
 		usage.SetStatisticsEnabled(cfg.UsageStatisticsEnabled)
 	}
+	if oldCfg == nil ||
+		oldCfg.UsageStatisticsEnabled != cfg.UsageStatisticsEnabled ||
+		oldCfg.UsageStatisticsStorage.Enabled != cfg.UsageStatisticsStorage.Enabled ||
+		oldCfg.UsageStatisticsStorage.Driver != cfg.UsageStatisticsStorage.Driver ||
+		oldCfg.UsageStatisticsStorage.Path != cfg.UsageStatisticsStorage.Path ||
+		oldCfg.UsageStatisticsStorage.FlushIntervalSeconds != cfg.UsageStatisticsStorage.FlushIntervalSeconds ||
+		oldCfg.UsageStatisticsStorage.BatchSize != cfg.UsageStatisticsStorage.BatchSize {
+		if err := usage.ConfigurePersistence(usage.BuildPersistenceConfig(cfg), false); err != nil {
+			log.Errorf("failed to reconfigure usage statistics persistence: %v", err)
+		}
+	}
 
 	if s.requestLogger != nil && (oldCfg == nil || oldCfg.ErrorLogsMaxFiles != cfg.ErrorLogsMaxFiles) {
 		if setter, ok := s.requestLogger.(interface{ SetErrorLogsMaxFiles(int) }); ok {

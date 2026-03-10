@@ -20,6 +20,7 @@ var statisticsEnabled atomic.Bool
 func init() {
 	statisticsEnabled.Store(true)
 	coreusage.RegisterPlugin(NewLoggerPlugin())
+	coreusage.RegisterPlugin(NewPersistencePlugin())
 }
 
 // LoggerPlugin collects in-memory request statistics for usage analysis.
@@ -158,27 +159,11 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 	if !statisticsEnabled.Load() {
 		return
 	}
-	timestamp := record.RequestedAt
-	if timestamp.IsZero() {
-		timestamp = time.Now()
-	}
-	detail := normaliseDetail(record.Detail)
-	totalTokens := detail.TotalTokens
-	statsKey := record.APIKey
-	if statsKey == "" {
-		statsKey = resolveAPIIdentifier(ctx, record)
-	}
-	failed := record.Failed
-	if !failed {
-		failed = !resolveSuccess(ctx)
-	}
-	success := !failed
-	modelName := record.Model
-	if modelName == "" {
-		modelName = "unknown"
-	}
-	dayKey := timestamp.Format("2006-01-02")
-	hourKey := timestamp.Hour()
+	persisted := normalisePersistedRecord(ctx, record)
+	totalTokens := persisted.Detail.Tokens.TotalTokens
+	success := !persisted.Detail.Failed
+	dayKey := persisted.Detail.Timestamp.Format("2006-01-02")
+	hourKey := persisted.Detail.Timestamp.Hour()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -191,18 +176,12 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 	}
 	s.totalTokens += totalTokens
 
-	stats, ok := s.apis[statsKey]
+	stats, ok := s.apis[persisted.APIName]
 	if !ok {
 		stats = &apiStats{Models: make(map[string]*modelStats)}
-		s.apis[statsKey] = stats
+		s.apis[persisted.APIName] = stats
 	}
-	s.updateAPIStats(stats, modelName, RequestDetail{
-		Timestamp: timestamp,
-		Source:    record.Source,
-		AuthIndex: record.AuthIndex,
-		Tokens:    detail,
-		Failed:    failed,
-	})
+	s.updateAPIStats(stats, persisted.ModelName, persisted.Detail)
 
 	s.requestsByDay[dayKey]++
 	s.requestsByHour[hourKey]++
@@ -469,4 +448,40 @@ func formatHour(hour int) string {
 	}
 	hour = hour % 24
 	return fmt.Sprintf("%02d", hour)
+}
+
+type persistedUsageRecord struct {
+	APIName   string
+	ModelName string
+	Detail    RequestDetail
+}
+
+func normalisePersistedRecord(ctx context.Context, record coreusage.Record) persistedUsageRecord {
+	timestamp := record.RequestedAt
+	if timestamp.IsZero() {
+		timestamp = time.Now()
+	}
+	apiName := strings.TrimSpace(record.APIKey)
+	if apiName == "" {
+		apiName = resolveAPIIdentifier(ctx, record)
+	}
+	modelName := strings.TrimSpace(record.Model)
+	if modelName == "" {
+		modelName = "unknown"
+	}
+	failed := record.Failed
+	if !failed {
+		failed = !resolveSuccess(ctx)
+	}
+	return persistedUsageRecord{
+		APIName:   apiName,
+		ModelName: modelName,
+		Detail: RequestDetail{
+			Timestamp: timestamp,
+			Source:    record.Source,
+			AuthIndex: record.AuthIndex,
+			Tokens:    normaliseDetail(record.Detail),
+			Failed:    failed,
+		},
+	}
 }

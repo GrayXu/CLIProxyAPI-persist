@@ -21,6 +21,9 @@ import (
 const (
 	DefaultPanelGitHubRepository = "https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
 	DefaultPprofAddr             = "127.0.0.1:8316"
+	DefaultUsageStatsDriver      = "sqlite"
+	DefaultUsageStatsFlushSecs   = 5
+	DefaultUsageStatsBatchSize   = 128
 )
 
 // Config represents the application's configuration, loaded from a YAML file.
@@ -63,6 +66,9 @@ type Config struct {
 
 	// UsageStatisticsEnabled toggles in-memory usage aggregation; when false, usage data is discarded.
 	UsageStatisticsEnabled bool `yaml:"usage-statistics-enabled" json:"usage-statistics-enabled"`
+
+	// UsageStatisticsStorage configures optional durable persistence for usage statistics.
+	UsageStatisticsStorage UsageStatisticsStorageConfig `yaml:"usage-statistics-storage" json:"usage-statistics-storage"`
 
 	// DisableCooling disables quota cooldown scheduling when true.
 	DisableCooling bool `yaml:"disable-cooling" json:"disable-cooling"`
@@ -149,6 +155,20 @@ type PprofConfig struct {
 	Enable bool `yaml:"enable" json:"enable"`
 	// Addr is the host:port address for the pprof HTTP server.
 	Addr string `yaml:"addr" json:"addr"`
+}
+
+// UsageStatisticsStorageConfig controls optional persistence for usage statistics.
+type UsageStatisticsStorageConfig struct {
+	// Enabled toggles durable storage for usage statistics.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Driver selects the storage backend. Currently only "sqlite" is supported.
+	Driver string `yaml:"driver" json:"driver"`
+	// Path is the on-disk database path. When empty, the runtime chooses a default under auth-dir.
+	Path string `yaml:"path" json:"path"`
+	// FlushIntervalSeconds controls how often queued usage records are flushed to storage.
+	FlushIntervalSeconds int `yaml:"flush-interval-seconds" json:"flush-interval-seconds"`
+	// BatchSize controls how many queued usage records are written in one batch.
+	BatchSize int `yaml:"batch-size" json:"batch-size"`
 }
 
 // RemoteManagement holds management API configuration under 'remote-management'.
@@ -541,6 +561,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	cfg.LogsMaxTotalSizeMB = 0
 	cfg.ErrorLogsMaxFiles = 10
 	cfg.UsageStatisticsEnabled = false
+	cfg.UsageStatisticsStorage.Driver = DefaultUsageStatsDriver
+	cfg.UsageStatisticsStorage.FlushIntervalSeconds = DefaultUsageStatsFlushSecs
+	cfg.UsageStatisticsStorage.BatchSize = DefaultUsageStatsBatchSize
 	cfg.DisableCooling = false
 	cfg.Pprof.Enable = false
 	cfg.Pprof.Addr = DefaultPprofAddr
@@ -600,6 +623,18 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	if cfg.ErrorLogsMaxFiles < 0 {
 		cfg.ErrorLogsMaxFiles = 10
+	}
+
+	cfg.UsageStatisticsStorage.Driver = strings.ToLower(strings.TrimSpace(cfg.UsageStatisticsStorage.Driver))
+	if cfg.UsageStatisticsStorage.Driver == "" {
+		cfg.UsageStatisticsStorage.Driver = DefaultUsageStatsDriver
+	}
+	cfg.UsageStatisticsStorage.Path = strings.TrimSpace(cfg.UsageStatisticsStorage.Path)
+	if cfg.UsageStatisticsStorage.FlushIntervalSeconds <= 0 {
+		cfg.UsageStatisticsStorage.FlushIntervalSeconds = DefaultUsageStatsFlushSecs
+	}
+	if cfg.UsageStatisticsStorage.BatchSize <= 0 {
+		cfg.UsageStatisticsStorage.BatchSize = DefaultUsageStatsBatchSize
 	}
 
 	if cfg.MaxRetryCredentials < 0 {
